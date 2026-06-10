@@ -45,16 +45,25 @@ def main():
                         pass
                 else:
                     print("Rejected. Injecting failure...")
-                    # We inject a tool message indicating rejection
-                    tool_message = ToolMessage(
-                        tool_call_id=tc["id"],
-                        name=tc["name"],
-                        content="Error: User denied permission to modify models.py"
-                    )
-                    # Update state with the rejection, then resume.
-                    # We resume by updating the state as if the 'execute_tools' node returned the rejection.
-                    graph.update_state(config, {"messages": [tool_message]}, as_node="execute_tools")
+                    # We must provide a ToolMessage response for EVERY tool call in the AIMessage 
+                    # to prevent the LLM provider (like OpenAI/DeepSeek) from throwing an error.
+                    tool_messages = []
+                    for t in last_ai_msg.tool_calls:
+                        if t["name"] == "write_file" and "models.py" in t["args"].get("filepath", ""):
+                            msg_content = "Error: User denied permission to modify models.py."
+                        else:
+                            msg_content = "Error: Tool execution cancelled because models.py modification was denied. Please retry without modifying models.py or ask for clarification."
+                        
+                        tool_messages.append(ToolMessage(
+                            tool_call_id=t["id"],
+                            name=t["name"],
+                            content=msg_content
+                        ))
                     
+                    # Update state with the rejection messages, simulating that 'execute_tools' handled them.
+                    graph.update_state(config, {"messages": tool_messages}, as_node="execute_tools")
+                    
+                    # Resume graph (it will move from execute_tools -> agent_reasoning)
                     for event in graph.stream(None, config, stream_mode="values"):
                         pass
 

@@ -53,7 +53,12 @@ def should_continue(state: GraphState):
     return "execute_tools"
 
 def execute_tools(state: GraphState):
-    """Executes tools (read-only or non-models.py writes)."""
+    """
+    Executes tools proposed by the LLM. 
+    This node handles read-only tools and writes that don't target models.py.
+    If the graph was paused at `ask_permission` and the user approved, 
+    the execution flows into here and all pending tool calls are executed.
+    """
     messages = state["messages"]
     last_message = messages[-1]
     
@@ -63,8 +68,11 @@ def execute_tools(state: GraphState):
     for tool_call in last_message.tool_calls:
         tool = tool_by_name.get(tool_call["name"])
         if tool:
-            result = tool.invoke(tool_call["args"])
-            tool_messages.append(ToolMessage(tool_call_id=tool_call["id"], name=tool_call["name"], content=str(result)))
+            try:
+                result = tool.invoke(tool_call["args"])
+                tool_messages.append(ToolMessage(tool_call_id=tool_call["id"], name=tool_call["name"], content=str(result)))
+            except Exception as e:
+                tool_messages.append(ToolMessage(tool_call_id=tool_call["id"], name=tool_call["name"], content=f"Error executing tool: {e}"))
         
     return {"messages": tool_messages}
 
