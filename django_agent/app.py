@@ -1,5 +1,7 @@
 import chainlit as cl
 import uuid
+import difflib
+import os
 from langchain_core.messages import ToolMessage, HumanMessage
 from graph import build_graph
 
@@ -55,8 +57,28 @@ async def process_graph_stream(graph, state_input, config):
         
         for tc in last_ai_msg.tool_calls:
             if tc["name"] == "write_file" and "models.py" in tc["args"].get("filepath", ""):
+                filepath = tc["args"].get("filepath", "")
                 file_content = tc["args"].get("content", "")
                 
+                diff_text = ""
+                if os.path.exists(filepath):
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        old_content = f.read()
+                    
+                    diff = difflib.unified_diff(
+                        old_content.splitlines(),
+                        file_content.splitlines(),
+                        fromfile=filepath,
+                        tofile=filepath,
+                        lineterm=""
+                    )
+                    diff_text = "\n".join(diff)
+                else:
+                    diff_text = f"File {filepath} does not exist. It will be created with the following content:\n{file_content}"
+                
+                if not diff_text.strip():
+                    diff_text = "No changes detected."
+
                 # Create action buttons
                 actions = [
                     cl.Action(name="approve_changes", value="approve", description="Approve", label="Approve"),
@@ -64,7 +86,7 @@ async def process_graph_stream(graph, state_input, config):
                 ]
                 
                 msg = cl.Message(
-                    content=f"⚠️ **Action Required** ⚠️\n\nI need to modify **models.py**. Please review the proposed changes:\n\n```python\n{file_content}\n```\n\nDo you approve these changes?",
+                    content=f"⚠️ **Action Required** ⚠️\n\nI need to modify **models.py**. Please review the proposed changes:\n\n```diff\n{diff_text}\n```\n\nDo you approve these changes?",
                     actions=actions,
                     author="System"
                 )
