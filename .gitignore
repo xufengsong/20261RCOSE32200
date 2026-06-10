@@ -48,5 +48,3 @@ langgraph.sqlite
 my_django_project/
 django_boilerplate/
 test_django_app/
-.chainlit
-.files

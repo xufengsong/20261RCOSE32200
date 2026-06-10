@@ -5,7 +5,53 @@ import os
 from langchain_core.messages import ToolMessage, HumanMessage
 from graph import build_graph
 
-st.set_page_config(layout="wide", page_title="Django Agent Workspace")
+# Setup layout
+st.set_page_config(layout="wide", page_title="Antigravity IDE", initial_sidebar_state="expanded")
+
+# Custom CSS for IDE-like appearance
+st.markdown("""
+<style>
+    /* Hide top header and menu */
+    header {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Remove padding around the main block */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 0rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+        max-width: 100%;
+    }
+
+    /* Style the columns to look like panes */
+    [data-testid="column"] {
+        border-right: 1px solid #2e3440;
+        padding-right: 10px;
+        padding-left: 10px;
+        height: 95vh;
+        overflow-y: auto;
+    }
+    
+    /* Remove right border on the last column */
+    [data-testid="column"]:last-child {
+        border-right: none;
+    }
+    
+    /* File tree button styling */
+    .stButton>button {
+        width: 100%;
+        text-align: left;
+        background-color: transparent;
+        border: none;
+        padding: 5px 10px;
+    }
+    .stButton>button:hover {
+        background-color: #2e3440;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 WORKSPACE_DIR = "my_django_project"
 
@@ -15,6 +61,7 @@ if "thread_id" not in st.session_state:
     st.session_state.config = {"configurable": {"thread_id": st.session_state.thread_id}}
     st.session_state.messages = []
     st.session_state.processed_message_ids = set()
+    st.session_state.active_file = None
     st.session_state.messages.append({"role": "assistant", "content": "Hello! I am your Django coding agent. What would you like me to build today?"})
 
 def process_graph_stream(state_input=None):
@@ -22,7 +69,6 @@ def process_graph_stream(state_input=None):
     config = st.session_state.config
     processed = st.session_state.processed_message_ids
     
-    # We use stream instead of astream for Streamlit sync flow
     for event in graph.stream(state_input, config, stream_mode="values"):
         messages = event.get("messages", [])
         if not messages:
@@ -41,23 +87,54 @@ def process_graph_stream(state_input=None):
                 st.session_state.messages.append({"role": "assistant", "content": last_msg.content})
         
         elif last_msg.type == "tool":
-            # Optional: log tools or add them to messages if you want them visible
             pass
 
-main_col, sidebar_col = st.columns([3, 1], gap="large")
+def list_files(startpath):
+    # Returns a list of all files in the directory
+    filepaths = []
+    if os.path.exists(startpath):
+        for root, dirs, files in os.walk(startpath):
+            # Skip hidden dirs and venv
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('venv', 'env', '__pycache__')]
+            for f in files:
+                if not f.startswith('.'):
+                    filepaths.append(os.path.join(root, f))
+    return filepaths
 
-with main_col:
-    st.title("Workspace & File Management")
-    st.markdown("Import folders or files to your workspace to begin.")
-    uploaded_files = st.file_uploader("Upload Files / Folders", accept_multiple_files=True)
-    if uploaded_files:
-        st.success(f"{len(uploaded_files)} files uploaded successfully (Simulation).")
+# 3 Columns: Explorer, Editor, Chat
+col_exp, col_edit, col_chat = st.columns([1, 2, 1.5], gap="small")
 
-    st.markdown("### Current Workspace")
-    st.code(f"{WORKSPACE_DIR}/\n├── models.py\n├── views.py\n├── urls.py\n└── ...", language="bash")
+with col_exp:
+    st.markdown("### 📂 Explorer")
+    files = list_files(WORKSPACE_DIR)
+    if not files:
+        st.caption("Workspace is empty or does not exist.")
+    else:
+        for f in files:
+            # Display relative path for cleanliness
+            rel_path = os.path.relpath(f, WORKSPACE_DIR)
+            if st.button(f"📄 {rel_path}", key=f"btn_{f}"):
+                st.session_state.active_file = f
 
-with sidebar_col:
-    st.header("Agent Chat")
+with col_edit:
+    st.markdown("### 💻 Editor")
+    if st.session_state.active_file and os.path.exists(st.session_state.active_file):
+        rel_path = os.path.relpath(st.session_state.active_file, WORKSPACE_DIR)
+        st.markdown(f"**{rel_path}**")
+        with open(st.session_state.active_file, "r", encoding="utf-8") as file:
+            content = file.read()
+            
+        # Determine language for syntax highlighting
+        ext = os.path.splitext(st.session_state.active_file)[1].lower()
+        lang_map = {'.py': 'python', '.html': 'html', '.js': 'javascript', '.css': 'css', '.ts': 'typescript'}
+        lang = lang_map.get(ext, 'markdown')
+        
+        st.code(content, language=lang)
+    else:
+        st.info("Select a file from the explorer to view its contents.")
+
+with col_chat:
+    st.markdown("### 💬 Agent")
     
     # Render messages
     for msg in st.session_state.messages:
@@ -133,11 +210,9 @@ with sidebar_col:
 
     # Accept user input only if we are not blocked
     if not needs_input:
-        user_input = st.chat_input("What would you like me to build today?")
+        user_input = st.chat_input("Ask the agent...")
         if user_input:
             st.session_state.messages.append({"role": "user", "content": user_input})
-            # Immediate redraw to show user's message
-            # But wait, we can just process and rerun
             
             if not state.values:
                 initial_state = {
