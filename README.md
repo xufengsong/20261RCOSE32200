@@ -21,11 +21,12 @@ This repository contains a specialized coding agent built using LangChain and La
 
 The agent code is located in the `django_agent` directory:
 
-- `requirements.txt`: Python dependencies (`langchain`, `langgraph`, `langchain-openai`, etc.).
+- `requirements.txt`: Python dependencies (`langchain`, `langgraph`, `chainlit`, etc.).
 - `state.py`: Defines the `GraphState` used to persist the workflow context.
 - `tools.py`: Custom read/write file utilities for the agent.
 - `graph.py`: The core LangGraph state machine defining the nodes and conditional edges.
-- `main.py`: The CLI runner that handles the human-in-the-loop interruption and resumption.
+- `main.py`: The original CLI runner.
+- `app.py`: The Chainlit UI application that streams the graph events to a ChatGPT-like web interface.
 
 ### Usage
 
@@ -35,7 +36,13 @@ The agent code is located in the `django_agent` directory:
    pip install -r requirements.txt
    ```
 3. Set your DeepSeek API key in `graph.py`.
-4. Run the agent:
+4. Run the web UI (Recommended):
+   ```bash
+   chainlit run app.py -w
+   ```
+   *This starts a local web server (usually at `http://localhost:8000`) where you can interact with the agent. It securely halts and presents Action buttons if `models.py` needs changes.*
+
+5. Alternatively, run the CLI:
    ```bash
    python main.py
    ```
