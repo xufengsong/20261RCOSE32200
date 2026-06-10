@@ -106,6 +106,17 @@ col_exp, col_edit, col_chat = st.columns([1, 2, 1.5], gap="small")
 
 with col_exp:
     st.markdown("### 📂 Explorer")
+    
+    uploaded_file = st.file_uploader("Upload to workspace", label_visibility="collapsed")
+    if uploaded_file is not None:
+        os.makedirs(WORKSPACE_DIR, exist_ok=True)
+        file_path = os.path.join(WORKSPACE_DIR, uploaded_file.name)
+        if not os.path.exists(file_path) or os.path.getsize(file_path) != uploaded_file.size:
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+    
+    st.markdown("---")
+    
     files = list_files(WORKSPACE_DIR)
     if not files:
         st.caption("Workspace is empty or does not exist.")
